@@ -1,0 +1,96 @@
+#!/bin/sh
+
+set -e
+
+BASE="https://guya.moe"
+DEFAULT_DIR="guya"
+DEFAULT_SERIES="Kaguya-Wants-To-Be-Confessed-To"
+VERSION="0.1.0"
+
+usage() {
+    echo "Usage: guya-dl [options...] [series_slugs...]"
+    echo "    -h       Print help message and exit."
+    echo "    -l       List all manga series and exit."
+    echo "    -o DIR   Specify output directory. Default: \"$DEFAULT_DIR\""
+    echo "    -v       Print version and exit."
+}
+
+list() {
+    echo "Available series:"
+    curl -sL "https://guya.moe/api/get_all_series" | jq -r '.[] | "    - \(.slug)"'
+}
+
+download() {
+    dir="$1"
+    shift 1
+    slugs="$@"
+
+    for slug in $slugs; do
+        out="$dir/$slug"
+        mkdir -p "$out"
+
+        printf "Fetching %s page data... " "$slug"
+        curl -sL "$BASE/api/series_page_data/$slug" | jq '.' > "$out/info.json"
+        echo "$(jq '.chapter_list | length' "$out/info.json" ) chapters"
+
+        chapters="$(jq -r '.chapter_list[][3]' "$out/info.json" | sort -n)"
+
+        for chapter in $chapters; do
+            if [ ! -e "$out/$chapter" ]; then
+                printf "Downloading chapter %s... " "$chapter"
+                curl -sLC - "$BASE/api/download_chapter/$slug/$chapter" -o "$out/$chapter.zip"
+                unzip -qqd "$out/$chapter" "$out/$chapter.zip"
+                rm -f "$out/$chapter.zip"
+                echo "Ok"
+            fi
+        done
+
+        printf "Downloading volume covers... "
+        covers="$(curl -sL "$BASE/api/get_volume_covers/$slug" | jq -r '.covers[] | "\(.[0]):\(.[2])"')"
+
+        for cover in $covers; do
+            volume="$(echo "$cover" | cut -d ':' -f 1)"
+            url="$(echo "$cover" | cut -d ':' -f 2)"
+
+            mkdir -p "$out/covers"
+
+            [ -e "$out/covers/$volume.webp" ] || curl -sL "$BASE/$url" -o "$out/covers/$volume.webp"
+        done
+
+        echo "Done"
+    done
+}
+
+while getopts "hlo:v" opt; do
+    case "$opt" in
+        h)
+            h=1
+            ;;
+        l)
+            l=1
+            ;;
+        o)
+            o="$OPTARG"
+            ;;
+        v)
+            v=1
+            ;;
+        ?)
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+[ -n "$h" ] && usage && exit
+[ -n "$l" ] && list && exit
+[ -z "$o" ] && o="$DEFAULT_DIR"
+[ -n "$v" ] && echo "guya-dl v${VERSION}" && exit
+
+shift $((OPTIND - 1))
+
+series="$@"
+
+[ -z "$series" ] && series="$DEFAULT_SERIES"
+
+download "$o" "$series"
