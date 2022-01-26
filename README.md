@@ -28,5 +28,6 @@ $ guya-dl Kaguya-Wants-To-Be-Confessed-To We-Want-To-Talk-About-Kaguya
 ## Dependencies
 - [curl](https://curl.se)
 - [jq](https://stedolan.github.io/jq/)
+- [unzip](http://infozip.sourceforge.net/UnZip.html)
 
 **Note:** the output directory format is unstable and may change before version 1.0
